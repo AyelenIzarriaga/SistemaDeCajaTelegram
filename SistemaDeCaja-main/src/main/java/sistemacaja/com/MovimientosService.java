@@ -233,10 +233,8 @@ public class MovimientosService {
     // =======================
     // ===== BOT ============
     // =======================
-// =======================
-    // ===== BOT ============
-    // =======================
-    public Movimientos crearDesdeBot(
+
+public Movimientos crearDesdeBot(
             movimientoTipo tipo,
             BigDecimal monto,
             String proveedorNombre,
@@ -247,13 +245,12 @@ public class MovimientosService {
     ) {
         Long idAlmacen = obtenerIdAlmacen(idUsuario);
 
-        // 1. Hash de Idempotencia para evitar duplicados
         String hashControl = String.format("%d-%s-%s-%s-%s", 
                 idUsuario, tipo, monto.toString(), fecha.toString(), descripcion);
 
-        // 2. Si ya existe, devolvemos el guardado sin duplicar
+        // Cambiamos aquí: .orElse(null) o .get() para convertir de Optional a Movimientos
         if (movimientosRepository.existsByHashControl(hashControl)) {
-            return movimientosRepository.findByHashControl(hashControl);
+            return movimientosRepository.findByHashControl(hashControl).orElse(null);
         }
 
         Proveedor proveedor = proveedorRepository
@@ -265,7 +262,6 @@ public class MovimientosService {
                     return proveedorRepository.save(p);
                 });
 
-        // Cargamos todos los datos del movimiento
         Movimientos mov = new Movimientos();
         mov.setMovimiento(tipo);
         mov.setMonto(monto);
@@ -274,15 +270,15 @@ public class MovimientosService {
         mov.setOrigen(origen);
         mov.setProveedor(proveedor);
         mov.setAlmacen(obtenerUsuario(idUsuario).getAlmacen());
-        mov.setHashControl(hashControl); // El campo de seguridad
+        mov.setHashControl(hashControl);
 
         validar(mov);
 
         try {
             return movimientosRepository.save(mov);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Protección de última instancia si entran dos pedidos al mismo tiempo
-            return movimientosRepository.findByHashControl(hashControl);
+            // Aquí también agregamos el .orElse(null)
+            return movimientosRepository.findByHashControl(hashControl).orElse(null);
         }
     }
     public Movimientos deshacerUltimo(Long idUsuario) {
@@ -302,5 +298,6 @@ public class MovimientosService {
 }
 
 }
+
 
 
