@@ -13,10 +13,11 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import java.util.HashSet;
 import java.util.Set;
 
-private Set<Integer> mensajesProcesados = new HashSet<>();
 
 @Component
 public class CajaBot extends TelegramLongPollingBot {
+
+    private Set<Integer> mensajesProcesados = new HashSet<>();
 
     @Value("${telegram.bot.username}")
     private String botUsername;
@@ -374,3 +375,4 @@ public class CajaBot extends TelegramLongPollingBot {
     }
 
 }
+
