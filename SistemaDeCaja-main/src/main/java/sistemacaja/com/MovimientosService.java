@@ -233,50 +233,58 @@ public class MovimientosService {
     // =======================
     // ===== BOT ============
     // =======================
-public Movimientos crearDesdeBot(
-        movimientoTipo tipo,
-        BigDecimal monto,
-        String proveedorNombre,
-        String descripcion,
-        OrigenMov origen,
-        Long idUsuario,
-        LocalDate fecha
-) {
-    Long idAlmacen = obtenerIdAlmacen(idUsuario);
+// =======================
+    // ===== BOT ============
+    // =======================
+    public Movimientos crearDesdeBot(
+            movimientoTipo tipo,
+            BigDecimal monto,
+            String proveedorNombre,
+            String descripcion,
+            OrigenMov origen,
+            Long idUsuario,
+            LocalDate fecha
+    ) {
+        Long idAlmacen = obtenerIdAlmacen(idUsuario);
 
-    // 1. Crear un Hash de Control Único
-    // Combinamos datos que no cambian en el reintento. 
-    // Si el usuario manda lo mismo en el mismo minuto, se considera duplicado.
-    String hashControl = String.format("%d-%s-%s-%s-%s", 
-            idUsuario, tipo, monto.toString(), fecha.toString(), descripcion);
+        // 1. Hash de Idempotencia para evitar duplicados
+        String hashControl = String.format("%d-%s-%s-%s-%s", 
+                idUsuario, tipo, monto.toString(), fecha.toString(), descripcion);
 
-    // 2. Verificar si ya existe para evitar la excepción pesada (Opcional pero recomendado)
-    if (movimientosRepository.existsByHashControl(hashControl)) {
-        return movimientosRepository.findByHashControl(hashControl); // Devolvemos el existente
+        // 2. Si ya existe, devolvemos el guardado sin duplicar
+        if (movimientosRepository.existsByHashControl(hashControl)) {
+            return movimientosRepository.findByHashControl(hashControl);
+        }
+
+        Proveedor proveedor = proveedorRepository
+                .findByNombreAndAlmacenId(proveedorNombre, idAlmacen)
+                .orElseGet(() -> {
+                    Proveedor p = new Proveedor();
+                    p.setNombre(proveedorNombre);
+                    p.setAlmacen1(obtenerUsuario(idUsuario).getAlmacen());
+                    return proveedorRepository.save(p);
+                });
+
+        // Cargamos todos los datos del movimiento
+        Movimientos mov = new Movimientos();
+        mov.setMovimiento(tipo);
+        mov.setMonto(monto);
+        mov.setDescripcion(descripcion);
+        mov.setFechaMovimiento(fecha);
+        mov.setOrigen(origen);
+        mov.setProveedor(proveedor);
+        mov.setAlmacen(obtenerUsuario(idUsuario).getAlmacen());
+        mov.setHashControl(hashControl); // El campo de seguridad
+
+        validar(mov);
+
+        try {
+            return movimientosRepository.save(mov);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Protección de última instancia si entran dos pedidos al mismo tiempo
+            return movimientosRepository.findByHashControl(hashControl);
+        }
     }
-
-    Proveedor proveedor = proveedorRepository
-            .findByNombreAndAlmacenId(proveedorNombre, idAlmacen)
-            .orElseGet(() -> {
-                Proveedor p = new Proveedor();
-                p.setNombre(proveedorNombre);
-                p.setAlmacen1(obtenerUsuario(idUsuario).getAlmacen());
-                return proveedorRepository.save(p);
-            });
-
-    Movimientos mov = new Movimientos();
-    // ... tus sets actuales ...
-    mov.setHashControl(hashControl); // <--- El nuevo campo
-
-    validar(mov);
-
-    try {
-        return movimientosRepository.save(mov);
-    } catch (org.springframework.dao.DataIntegrityViolationException e) {
-        // Si justo entró otro hilo al mismo tiempo, rescatamos el ya guardado
-        return movimientosRepository.findByHashControl(hashControl);
-    }
-}
     public Movimientos deshacerUltimo(Long idUsuario) {
     // 1. Usamos tu método utilitario que ya tiene manejo de errores (RuntimeException)
     Long idAlmacen = obtenerIdAlmacen(idUsuario);
@@ -294,4 +302,5 @@ public Movimientos crearDesdeBot(
 }
 
 }
+
 
