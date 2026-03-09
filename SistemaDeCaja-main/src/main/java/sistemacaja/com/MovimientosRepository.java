@@ -50,7 +50,11 @@ BigDecimal sumarPorTipo(
         @Param("tipo") movimientoTipo tipo
 );
 
+
 Optional<Movimientos> findTopByAlmacenIdOrderByFechaRegistroDesc(Long almacenId);
 
+boolean existsByHashControl(String hashControl);
+Optional<Movimientos> findByHashControl(String hashControl);
 
 }
+
