@@ -45,6 +45,7 @@ public class Movimientos{
 	@ManyToOne
 	@JoinColumn(name = "almacen_id")
 	private Almacen almacen;
+	private String hashControl;
 
 
 	public Movimientos(){}
@@ -117,6 +118,9 @@ public class Movimientos{
     		}
 	}
 
+	public String getHashControl() { return hashControl; }
+	public void setHashControl(String hashControl) { this.hashControl = hashControl; }
+
 
 	public Movimientos(movimientoTipo movimiento, LocalDate fechaMovimiento, LocalDate fechaRegistro, BigDecimal monto, String descripcion, OrigenMov origen, Proveedor proveedor){
     		this.movimiento = movimiento;
@@ -128,3 +132,4 @@ public class Movimientos{
 		this.proveedor=proveedor;
     	}
 }
+
