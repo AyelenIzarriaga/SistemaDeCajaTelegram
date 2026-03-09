@@ -278,16 +278,20 @@ public Movimientos crearDesdeBot(
     }
 }
     public Movimientos deshacerUltimo(Long idUsuario) {
+    // 1. Usamos tu método utilitario que ya tiene manejo de errores (RuntimeException)
+    Long idAlmacen = obtenerIdAlmacen(idUsuario);
 
-        Movimientos m = movimientosRepository
-                .findTopByAlmacenIdOrderByFechaRegistroDesc(
-                        usuarioRepository.findById(idUsuario).get().getAlmacen().getIdAlmacen()
-                )
-                .orElseThrow(() -> new RuntimeException("No hay movimientos para borrar"));
+    // 2. Buscamos el último movimiento de ESE almacén específicamente
+    Movimientos ultimo = movimientosRepository
+            .findTopByAlmacenIdOrderByFechaRegistroDesc(idAlmacen)
+            .orElseThrow(() -> new RuntimeException("No hay movimientos registrados para este almacén"));
 
-        movimientosRepository.delete(m);
+    // 3. Borramos el movimiento
+    movimientosRepository.delete(ultimo);
 
-        return m;
-    }
+    // 4. Devolvemos el objeto borrado (útil para que el bot responda: "Se borró: Gasto $500")
+    return ultimo;
+}
 
 }
+
