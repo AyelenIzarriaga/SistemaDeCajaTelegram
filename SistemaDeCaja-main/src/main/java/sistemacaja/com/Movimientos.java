@@ -20,7 +20,7 @@ import jakarta.persistence.Table;
 
 
 @Entity
-@Table(name = "Movimientos")
+@Table(name = "movimientos")
 public class Movimientos {
 
     @Id
@@ -84,4 +84,5 @@ public class Movimientos {
     public String getHashControl() { return hashControl; }
     public void setHashControl(String hashControl) { this.hashControl = hashControl; }
 }
+
 
