@@ -7,6 +7,7 @@ import java.util.List;
 
 
 @Entity
+@Table(name = "almacenes") 
 public class Almacen {
    @Id
    @GeneratedValue
@@ -53,3 +54,4 @@ public class Almacen {
 		this.Usuarios=Usuarios;
 	}
 }
+
