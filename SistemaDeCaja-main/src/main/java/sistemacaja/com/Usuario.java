@@ -9,6 +9,7 @@ import jakarta.persistence.ManyToOne;
 
 
 @Entity 
+@Table(name = "usuarios") 
 
 public class Usuario{
 	@Id
@@ -56,3 +57,4 @@ public class Usuario{
 	}
 }
 	
+
