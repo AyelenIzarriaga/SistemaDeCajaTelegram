@@ -15,7 +15,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 
 @Entity
-@Table(name = "Proveedores")
+@Table(name = "proveedores")
 public class Proveedor {
 
     @Id
@@ -55,4 +55,5 @@ public class Proveedor {
     public Almacen getAlmacen() { return almacen; }
     public void setAlmacen(Almacen almacen) { this.almacen = almacen; }
 }
+
 
