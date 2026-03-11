@@ -17,7 +17,7 @@ public class BotInitializer {
         this.cajaBot = cajaBot;
     }
 
-    @PostConstruct
+    /* @PostConstruct
     public void init() {
         try {
             TelegramBotsApi api = new TelegramBotsApi(DefaultBotSession.class);
@@ -26,5 +26,6 @@ public class BotInitializer {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
+    } */
 }
+
