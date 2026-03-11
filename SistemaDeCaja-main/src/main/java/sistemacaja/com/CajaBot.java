@@ -29,6 +29,17 @@ public class CajaBot extends TelegramLongPollingBot {
     private MovimientosService movimientosService;
 
     @Override
+    public void clearWebhook() throws org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException {
+        try {
+            org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook deleteWebhook = new org.telegram.telegrambots.meta.api.methods.updates.DeleteWebhook();
+            deleteWebhook.setDropPendingUpdates(true); // Esto limpia mensajes acumulados del error
+            execute(deleteWebhook);
+        } catch (Exception e) {
+            System.out.println("Error limpiando webhook: " + e.getMessage());
+        }
+    }
+
+    @Override
     public String getBotUsername() {
         return botUsername;
     }
@@ -375,4 +386,5 @@ public class CajaBot extends TelegramLongPollingBot {
     }
 
 }
+
 
