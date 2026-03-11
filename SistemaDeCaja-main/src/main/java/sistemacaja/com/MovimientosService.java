@@ -6,6 +6,8 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -43,7 +45,22 @@ public class MovimientosService {
         return usuario.getAlmacen().getIdAlmacen();
     }
 
+    private void validar(Movimientos m) {
+        for (Criterio c : criterios) {
+            if (!c.cumple(m)) {
+                throw new IllegalStateException("Movimiento inválido: " + c.getClass().getSimpleName());
+            }
+        }
+    }
+
+    // =============================
+    // CREAR MOVIMIENTO NORMAL
+    // =============================
+
     public MovimientosResponse crearMovimiento(CrearMovimientoRequest request, Long idUsuario) {
+
+        Usuario usuario = obtenerUsuario(idUsuario);
+
         Proveedor proveedor = proveedorRepository.findById(request.getIdProveedor())
                 .orElseThrow(() -> new IllegalArgumentException("Proveedor no encontrado"));
 
@@ -54,9 +71,10 @@ public class MovimientosService {
         mov.setDescripcion(request.getDescripcion());
         mov.setOrigen(request.getOrigen());
         mov.setProveedor(proveedor);
-        mov.setAlmacen(obtenerUsuario(idUsuario).getAlmacen());
+        mov.setAlmacen(usuario.getAlmacen());
 
         validar(mov);
+
         Movimientos guardado = movimientosRepository.save(mov);
 
         return new MovimientosResponse(
@@ -70,15 +88,12 @@ public class MovimientosService {
         );
     }
 
-    private void validar(Movimientos m) {
-        for (Criterio c : criterios) {
-            if (!c.cumple(m)) {
-                throw new IllegalStateException("Movimiento inválido: " + c.getClass().getSimpleName());
-            }
-        }
-    }
+    // =============================
+    // LISTAR
+    // =============================
 
     public List<MovimientosResponse> listar(Long idUsuario) {
+
         return movimientosRepository.findByAlmacenId(obtenerIdAlmacen(idUsuario))
                 .stream()
                 .map(m -> new MovimientosResponse(
@@ -93,13 +108,19 @@ public class MovimientosService {
                 .toList();
     }
 
+    // =============================
+    // RESUMENES
+    // =============================
+
     private BigDecimal promedio(BigDecimal total, long dias) {
         if (dias <= 0) return BigDecimal.ZERO;
         return total.divide(BigDecimal.valueOf(dias), 2, RoundingMode.HALF_UP);
     }
 
     public ResumenCajaResponse resumenDia(LocalDate fecha, Long idUsuario) {
+
         Long idAlmacen = obtenerIdAlmacen(idUsuario);
+
         List<Movimientos> lista = movimientosRepository.findByFechaMovimiento(fecha, idAlmacen);
 
         BigDecimal entradas = lista.stream()
@@ -118,9 +139,12 @@ public class MovimientosService {
     }
 
     public ResumenCajaResponse resumenSemana(LocalDate fecha, Long idUsuario) {
+
         Long idAlmacen = obtenerIdAlmacen(idUsuario);
+
         LocalDate desde = fecha.with(DayOfWeek.MONDAY);
         LocalDate hasta = fecha.with(DayOfWeek.SUNDAY);
+
         long diasPeriodo = ChronoUnit.DAYS.between(desde, hasta.plusDays(1));
 
         List<Movimientos> lista = movimientosRepository.findByRango(desde, hasta, idAlmacen);
@@ -137,13 +161,23 @@ public class MovimientosService {
 
         BigDecimal libre = entradas.subtract(salidas);
 
-        return new ResumenCajaResponse(desde, entradas, salidas, libre, promedio(libre, diasPeriodo), promedio(entradas, diasPeriodo));
+        return new ResumenCajaResponse(
+                desde,
+                entradas,
+                salidas,
+                libre,
+                promedio(libre, diasPeriodo),
+                promedio(entradas, diasPeriodo)
+        );
     }
 
     public ResumenCajaResponse resumenMes(LocalDate fecha, Long idUsuario) {
+
         Long idAlmacen = obtenerIdAlmacen(idUsuario);
+
         LocalDate desde = fecha.withDayOfMonth(1);
         LocalDate hasta = fecha.withDayOfMonth(fecha.lengthOfMonth());
+
         long diasPeriodo = ChronoUnit.DAYS.between(desde, hasta.plusDays(1));
 
         List<Movimientos> lista = movimientosRepository.findByRango(desde, hasta, idAlmacen);
@@ -160,51 +194,95 @@ public class MovimientosService {
 
         BigDecimal libre = entradas.subtract(salidas);
 
-        return new ResumenCajaResponse(desde, entradas, salidas, libre, promedio(libre, diasPeriodo), promedio(entradas, diasPeriodo));
+        return new ResumenCajaResponse(
+                desde,
+                entradas,
+                salidas,
+                libre,
+                promedio(libre, diasPeriodo),
+                promedio(entradas, diasPeriodo)
+        );
     }
 
-    public Movimientos crearDesdeBot(movimientoTipo tipo, BigDecimal monto, String proveedorNombre, String descripcion, OrigenMov origen, Long idUsuario, LocalDate fecha) {
-        Long idAlmacen = obtenerIdAlmacen(idUsuario);
-        String hashControl = String.format("%d-%s-%s-%s-%s", idUsuario, tipo, monto.toString(), fecha.toString(), descripcion);
+    // =============================
+    // BOT TELEGRAM
+    // =============================
+
+    public Movimientos crearDesdeBot(
+            movimientoTipo tipo,
+            BigDecimal monto,
+            String proveedorNombre,
+            String descripcion,
+            OrigenMov origen,
+            Long idUsuario,
+            LocalDate fecha) {
+
+        Usuario usuario = obtenerUsuario(idUsuario);
+        Long idAlmacen = usuario.getAlmacen().getIdAlmacen();
+
+        // normalizar nombre proveedor
+        proveedorNombre = proveedorNombre.trim().toLowerCase();
+
+        // hash anti duplicado
+        String hashControl = String.format(
+                "%d-%s-%s-%s-%s",
+                idUsuario,
+                tipo,
+                monto.toString(),
+                fecha.toString(),
+                proveedorNombre
+        );
 
         if (movimientosRepository.existsByHashControl(hashControl)) {
             return movimientosRepository.findByHashControl(hashControl).orElse(null);
         }
 
-        Proveedor proveedor = proveedorRepository.findByNombreAndAlmacenId(proveedorNombre, idAlmacen)
+        // buscar proveedor existente
+        Proveedor proveedor = proveedorRepository
+                .findByNombreAndAlmacenId(proveedorNombre, idAlmacen)
                 .orElseGet(() -> {
-                    Proveedor p = new Proveedor();
-                    p.setNombre(proveedorNombre);
-                    // CAMBIO AQUÍ: Usamos setAlmacen() sin el "1"
-                    p.setAlmacen(obtenerUsuario(idUsuario).getAlmacen());
-                    return proveedorRepository.save(p);
+                    Proveedor nuevo = new Proveedor();
+                    nuevo.setNombre(proveedorNombre);
+                    nuevo.setAlmacen(usuario.getAlmacen());
+                    return proveedorRepository.save(nuevo);
                 });
 
         Movimientos mov = new Movimientos();
+
         mov.setMovimiento(tipo);
         mov.setMonto(monto);
         mov.setDescripcion(descripcion);
         mov.setFechaMovimiento(fecha);
         mov.setOrigen(origen);
         mov.setProveedor(proveedor);
-        mov.setAlmacen(obtenerUsuario(idUsuario).getAlmacen());
+        mov.setAlmacen(usuario.getAlmacen());
         mov.setHashControl(hashControl);
 
         validar(mov);
 
         try {
             return movimientosRepository.save(mov);
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             return movimientosRepository.findByHashControl(hashControl).orElse(null);
         }
     }
 
+    // =============================
+    // DESHACER
+    // =============================
+
     public Movimientos deshacerUltimo(Long idUsuario) {
+
         Long idAlmacen = obtenerIdAlmacen(idUsuario);
-        Movimientos ultimo = movimientosRepository.findTopByAlmacenIdOrderByFechaRegistroDesc(idAlmacen)
-                .orElseThrow(() -> new RuntimeException("No hay movimientos registrados para este almacén"));
+
+        Movimientos ultimo = movimientosRepository
+                .findTopByAlmacenIdOrderByFechaRegistroDesc(idAlmacen)
+                .orElseThrow(() ->
+                        new RuntimeException("No hay movimientos registrados para este almacén"));
 
         movimientosRepository.delete(ultimo);
+
         return ultimo;
     }
 }
+
