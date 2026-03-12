@@ -6,7 +6,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -207,7 +207,7 @@ public class MovimientosService {
     // =============================
     // BOT TELEGRAM
     // =============================
-
+   @Transactional
     public Movimientos crearDesdeBot(
             movimientoTipo tipo,
             BigDecimal monto,
@@ -283,3 +283,4 @@ public class MovimientosService {
         return ultimo;
     }
 }
+
