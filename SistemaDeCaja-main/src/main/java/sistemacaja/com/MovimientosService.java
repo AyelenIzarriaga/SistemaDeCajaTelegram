@@ -220,29 +220,27 @@ public class MovimientosService {
         Usuario usuario = obtenerUsuario(idUsuario);
         Long idAlmacen = usuario.getAlmacen().getIdAlmacen();
 
-        // normalizar nombre proveedor
-        proveedorNombre = proveedorNombre.trim().toLowerCase();
+        // normalizar proveedor
+        String proveedorNombreNormalizado = proveedorNombre.trim().toLowerCase();
 
-        // hash anti duplicado
         String hashControl = String.format(
                 "%d-%s-%s-%s-%s",
                 idUsuario,
                 tipo,
                 monto.toString(),
                 fecha.toString(),
-                proveedorNombre
+                proveedorNombreNormalizado
         );
 
         if (movimientosRepository.existsByHashControl(hashControl)) {
             return movimientosRepository.findByHashControl(hashControl).orElse(null);
         }
 
-        // buscar proveedor existente
         Proveedor proveedor = proveedorRepository
-                .findByNombreAndAlmacenId(proveedorNombre, idAlmacen)
+                .findByNombreAndAlmacenId(proveedorNombreNormalizado, idAlmacen)
                 .orElseGet(() -> {
                     Proveedor nuevo = new Proveedor();
-                    nuevo.setNombre(proveedorNombre);
+                    nuevo.setNombre(proveedorNombreNormalizado);
                     nuevo.setAlmacen(usuario.getAlmacen());
                     return proveedorRepository.save(nuevo);
                 });
@@ -285,4 +283,3 @@ public class MovimientosService {
         return ultimo;
     }
 }
-
