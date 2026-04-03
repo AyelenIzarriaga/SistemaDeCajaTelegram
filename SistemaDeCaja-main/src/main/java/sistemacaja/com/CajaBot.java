@@ -1,11 +1,11 @@
 package sistemacaja.com;
- 
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.Locale;
- 
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -14,22 +14,24 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import java.util.HashSet;
 import java.util.Set;
- 
- 
+
 @Component
 public class CajaBot extends TelegramLongPollingBot {
- 
+
     private Set<Integer> mensajesProcesados = new HashSet<>();
- 
+
     @Value("${telegram.bot.username}")
     private String botUsername;
- 
+
     @Value("${telegram.bot.token}")
     private String botToken;
- 
+
     @Autowired
     private MovimientosService movimientosService;
- 
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
     @Override
     public void clearWebhook() throws org.telegram.telegrambots.meta.exceptions.TelegramApiRequestException {
         try {
@@ -40,109 +42,115 @@ public class CajaBot extends TelegramLongPollingBot {
             System.out.println("Error limpiando webhook: " + e.getMessage());
         }
     }
- 
+
     @Override
     public String getBotUsername() {
         return botUsername;
     }
- 
+
     @Override
     public String getBotToken() {
         return botToken;
     }
- 
+
     @Override
     public void onUpdateReceived(Update update) {
- 
+
         if (!update.hasMessage() || !update.getMessage().hasText()) return;
- 
+
         Integer messageId = update.getMessage().getMessageId();
- 
+
         if (mensajesProcesados.contains(messageId)) {
             return;
         }
- 
+
         mensajesProcesados.add(messageId);
- 
+
         String texto = update.getMessage().getText().toLowerCase();
         Long chatId = update.getMessage().getChatId();
- 
+        Long telegramId = update.getMessage().getFrom().getId();
+
         try {
- 
+
             if (texto.startsWith("/ingreso")) {
-                procesarIngreso(texto, chatId);
+                procesarIngreso(texto, chatId, telegramId);
                 return;
             }
- 
+
             if (texto.startsWith("/gasto")) {
-                procesarGasto(texto, chatId);
+                procesarGasto(texto, chatId, telegramId);
                 return;
             }
- 
+
             if (texto.equals("/hoy")) {
-                procesarHoy(chatId);
+                procesarHoy(chatId, telegramId);
                 return;
             }
- 
+
             if (texto.startsWith("/mes")) {
-                procesarMes(chatId, texto);
+                procesarMes(chatId, texto, telegramId);
                 return;
             }
- 
+
             if (texto.equals("/semana")) {
-                procesarSemana(chatId);
+                procesarSemana(chatId, telegramId);
                 return;
             }
- 
+
             if (texto.startsWith("/balance")) {
-                procesarBalance(chatId, texto);
+                procesarBalance(chatId, texto, telegramId);
                 return;
             }
- 
+
             if (texto.equals("/deshacer")) {
-                procesarDeshacer(chatId);
+                procesarDeshacer(chatId, telegramId);
                 return;
             }
- 
+
             enviarHelp(chatId);
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ " + e.getMessage());
         }
     }
- 
+
+    private Long obtenerIdUsuario(Long telegramId, Long chatId) {
+        return usuarioRepository.findByTelegramId(telegramId)
+                .orElseThrow(() -> new RuntimeException("Usuario no registrado. Contactá al administrador."))
+                .getId();
+    }
+
     // ======================
     // ====== BOT ==========
     // ======================
- 
-    private void procesarIngreso(String texto, Long chatId) {
- 
+
+    private void procesarIngreso(String texto, Long chatId, Long telegramId) {
         try {
             String[] partes = texto.trim().split("\\s+");
- 
+
             if (partes.length < 3) {
                 enviar(chatId, "❌ Uso: /ingreso monto proveedor [detalle] [fecha]");
                 return;
             }
- 
+
             String montoTexto = partes[1]
                     .replace("$", "")
                     .replace(",", ".")
                     .replaceAll("[^0-9.]", "");
- 
+
             BigDecimal monto = new BigDecimal(montoTexto);
- 
+
             LocalDate fecha = extraerFechaFinal(texto);
             String proveedorNombre = extraerProveedor(texto);
             String desc = extraerDescripcion(texto);
- 
+
             OrigenMov origen = texto.contains("casa")
                     ? OrigenMov.CASA
                     : OrigenMov.LOCAL;
- 
-            Long idUsuario = 3L;
- 
+
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             movimientosService.crearDesdeBot(
                     movimientoTipo.ENTRADA,
                     monto,
@@ -152,43 +160,42 @@ public class CajaBot extends TelegramLongPollingBot {
                     idUsuario,
                     fecha
             );
- 
+
             enviar(chatId, "✅ Ingreso: $" + monto + " → " + proveedorNombre +
                     " (" + fecha + ")");
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ " + e.getMessage());
         }
     }
- 
-    private void procesarGasto(String texto, Long chatId) {
- 
+
+    private void procesarGasto(String texto, Long chatId, Long telegramId) {
         try {
             String[] partes = texto.trim().split("\\s+");
- 
+
             if (partes.length < 3) {
                 enviar(chatId, "❌ Uso: /gasto monto proveedor [detalle] [fecha]");
                 return;
             }
- 
+
             String montoTexto = partes[1]
                     .replace("$", "")
                     .replace(",", ".")
                     .replaceAll("[^0-9.]", "");
- 
+
             BigDecimal monto = new BigDecimal(montoTexto);
- 
+
             LocalDate fecha = extraerFechaFinal(texto);
             String proveedorNombre = extraerProveedor(texto);
             String desc = extraerDescripcion(texto);
- 
+
             OrigenMov origen = texto.contains("casa")
                     ? OrigenMov.CASA
                     : OrigenMov.LOCAL;
- 
-            Long idUsuario = 3L;
- 
+
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             movimientosService.crearDesdeBot(
                     movimientoTipo.SALIDA,
                     monto,
@@ -198,48 +205,45 @@ public class CajaBot extends TelegramLongPollingBot {
                     idUsuario,
                     fecha
             );
- 
+
             enviar(chatId, "❌ Gasto: $" + monto + " → " + proveedorNombre +
                     " (" + fecha + ")");
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ " + e.getMessage());
         }
     }
- 
-    private void procesarHoy(Long chatId) {
- 
+
+    private void procesarHoy(Long chatId, Long telegramId) {
         try {
-            Long idUsuario = 3L;
- 
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             ResumenCajaResponse r =
                     movimientosService.resumenDia(LocalDate.now(), idUsuario);
- 
+
             enviar(chatId,
                     "📅 Caja hoy\n" +
                     "Entradas: $" + r.getEntradas() + "\n" +
                     "Salidas: $" + r.getSalidas() + "\n" +
                     "Libre: $" + r.getLibre());
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ Error obteniendo caja de hoy");
         }
     }
- 
-    private void procesarMes(Long chatId, String texto) {
- 
+
+    private void procesarMes(Long chatId, String texto, Long telegramId) {
         try {
-            Long idUsuario = 3L;
- 
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             String[] partes = texto.trim().split("\\s+");
-            LocalDate fecha = LocalDate.now(); // default: mes actual
- 
+            LocalDate fecha = LocalDate.now();
+
             if (partes.length >= 2) {
                 String param = partes[1];
                 try {
-                    // Formato: /mes 3  (número de mes del año actual)
                     int mes = Integer.parseInt(param);
                     if (mes < 1 || mes > 12) {
                         enviar(chatId, "❌ El mes debe ser un número entre 1 y 12.");
@@ -248,7 +252,6 @@ public class CajaBot extends TelegramLongPollingBot {
                     fecha = LocalDate.of(LocalDate.now().getYear(), mes, 1);
                 } catch (NumberFormatException e1) {
                     try {
-                        // Formato: /mes 2026-03
                         fecha = LocalDate.parse(param + "-01");
                     } catch (Exception e2) {
                         enviar(chatId, "❌ Formato inválido. Usá: /mes 3 o /mes 2026-03");
@@ -256,11 +259,11 @@ public class CajaBot extends TelegramLongPollingBot {
                     }
                 }
             }
- 
+
             ResumenCajaResponse r = movimientosService.resumenMes(fecha, idUsuario);
- 
+
             String nombreMes = fecha.getMonth().getDisplayName(TextStyle.FULL, new Locale("es", "AR"));
- 
+
             enviar(chatId,
                     "📆 Caja " + nombreMes + " " + fecha.getYear() + "\n" +
                     "Entradas: $" + r.getEntradas() + "\n" +
@@ -268,21 +271,20 @@ public class CajaBot extends TelegramLongPollingBot {
                     "Libre: $" + r.getLibre() + "\n" +
                     "Prom. libre: $" + r.getPromedioLibre() + "\n" +
                     "Prom. recaudación: $" + r.getPromedioRecaudacion());
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ Error obteniendo caja del mes");
         }
     }
- 
-    private void procesarSemana(Long chatId) {
- 
+
+    private void procesarSemana(Long chatId, Long telegramId) {
         try {
-            Long idUsuario = 3L;
- 
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             ResumenCajaResponse r =
                     movimientosService.resumenSemana(LocalDate.now(), idUsuario);
- 
+
             enviar(chatId,
                     "📆 Caja semana\n" +
                     "Entradas: $" + r.getEntradas() + "\n" +
@@ -290,25 +292,23 @@ public class CajaBot extends TelegramLongPollingBot {
                     "Libre: $" + r.getLibre() + "\n" +
                     "Prom. libre: $" + r.getPromedioLibre() + "\n" +
                     "Prom. recaudación: $" + r.getPromedioRecaudacion());
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ Error obteniendo caja semanal");
         }
     }
- 
-    private void procesarBalance(Long chatId, String texto) {
- 
+
+    private void procesarBalance(Long chatId, String texto, Long telegramId) {
         try {
-            Long idUsuario = 3L;
- 
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             String[] partes = texto.trim().split("\\s+");
-            LocalDate fecha = LocalDate.now(); // default: mes actual
- 
+            LocalDate fecha = LocalDate.now();
+
             if (partes.length >= 2) {
                 String param = partes[1];
                 try {
-                    // Formato: /balance 3  (número de mes del año actual)
                     int mes = Integer.parseInt(param);
                     if (mes < 1 || mes > 12) {
                         enviar(chatId, "❌ El mes debe ser un número entre 1 y 12.");
@@ -317,7 +317,6 @@ public class CajaBot extends TelegramLongPollingBot {
                     fecha = LocalDate.of(LocalDate.now().getYear(), mes, 1);
                 } catch (NumberFormatException e1) {
                     try {
-                        // Formato: /balance 2026-03
                         fecha = LocalDate.parse(param + "-01");
                     } catch (Exception e2) {
                         enviar(chatId, "❌ Formato inválido. Usá: /balance 3 o /balance 2026-03");
@@ -325,11 +324,11 @@ public class CajaBot extends TelegramLongPollingBot {
                     }
                 }
             }
- 
+
             ResumenCajaResponse r = movimientosService.resumenMes(fecha, idUsuario);
- 
+
             String nombreMes = fecha.getMonth().getDisplayName(TextStyle.FULL, new Locale("es", "AR"));
- 
+
             enviar(chatId,
                     "📊 Balance " + nombreMes + " " + fecha.getYear() + "\n" +
                     "Entradas: $" + r.getEntradas() + "\n" +
@@ -337,45 +336,41 @@ public class CajaBot extends TelegramLongPollingBot {
                     "Libre:    $" + r.getLibre() + "\n" +
                     "Prom. libre: $" + r.getPromedioLibre() + "\n" +
                     "Prom. recaudación: $" + r.getPromedioRecaudacion());
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ Error obteniendo balance");
         }
     }
- 
-    private void procesarDeshacer(Long chatId) {
- 
+
+    private void procesarDeshacer(Long chatId, Long telegramId) {
         try {
-            Long idUsuario = 3L;
- 
+            Long idUsuario = obtenerIdUsuario(telegramId, chatId);
+
             Movimientos m = movimientosService.deshacerUltimo(idUsuario);
- 
+
             enviar(chatId,
                     "↩ Deshecho:\n" +
                     m.getMovimiento() + " $" + m.getMonto() +
                     " → " + m.getProveedor().getNombre() +
                     " (" + m.getFechaMovimiento() + ")");
- 
+
         } catch (Exception e) {
             e.printStackTrace();
             enviar(chatId, "❌ " + e.getMessage());
         }
     }
- 
+
     private void enviar(Long chatId, String texto) {
- 
         SendMessage msg = new SendMessage(chatId.toString(), texto);
- 
         try {
             execute(msg);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
- 
+
     private void enviarHelp(Long chatId) {
- 
         enviar(chatId,
                 "🤖 Comandos disponibles:\n\n" +
                 "/ingreso monto proveedor [detalle] [fecha]\n" +
@@ -390,54 +385,52 @@ public class CajaBot extends TelegramLongPollingBot {
                 "/balance 2026-03 → balance marzo 2026\n" +
                 "/deshacer → deshace el último movimiento");
     }
- 
+
     // ======================
     // ===== HELPERS =======
     // ======================
- 
+
     private LocalDate extraerFechaFinal(String texto) {
         String[] partes = texto.trim().split("\\s+");
         String ultimo = partes[partes.length - 1];
- 
+
         try { return LocalDate.parse(ultimo); } catch (Exception e) {}
- 
+
         try {
             DateTimeFormatter f = DateTimeFormatter.ofPattern("dd/MM/yyyy");
             return LocalDate.parse(ultimo, f);
         } catch (Exception e) {}
- 
+
         if (ultimo.equalsIgnoreCase("ayer")) return LocalDate.now().minusDays(1);
         if (ultimo.equalsIgnoreCase("hoy")) return LocalDate.now();
- 
+
         return LocalDate.now();
     }
- 
+
     private String extraerProveedor(String texto) {
         String[] partes = texto.trim().split("\\s+");
         if (partes.length < 3) return "general";
         return partes[2];
     }
- 
+
     private String extraerDescripcion(String texto) {
         String[] partes = texto.trim().split("\\s+");
- 
+
         if (partes.length <= 3) return "";
- 
+
         String ultimo = partes[partes.length - 1];
         boolean hayFecha =
                 ultimo.matches("\\d{4}-\\d{2}-\\d{2}") ||
                 ultimo.matches("\\d{2}/\\d{2}/\\d{4}") ||
                 ultimo.equalsIgnoreCase("ayer") ||
                 ultimo.equalsIgnoreCase("hoy");
- 
+
         int desde = 3;
         int hasta = hayFecha ? partes.length - 1 : partes.length;
- 
+
         if (desde >= hasta) return "";
- 
+
         return String.join(" ",
                 java.util.Arrays.copyOfRange(partes, desde, hasta));
     }
- 
 }
- 
